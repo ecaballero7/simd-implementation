@@ -4,10 +4,6 @@ section .rodata
 
 %define filtro_alpa  0xFF000000
 
-;para usar con pshufb
-;rotation: DB  0, 0, 0, 0xff, 0, 0, 0, 0xff, 0, 0, 0, 0xff, 0, 0, 0, 0xff
-rotation: DB  0, 0, 0, 0xFF, 1, 1, 1, 0xFF, 2, 2, 2, 0xFF, 3, 3, 3, 0xFF
-
 section .data
 ;Valores para setear 255
 cmp_mask: times 4 DB  0xff, 0xff, 0xff, 0xff
@@ -39,13 +35,15 @@ Nivel_asm:
   mov cl, N
   shl r9d, cl             ;r9d = 1 << N = mask (word)
   pxor xmm10, xmm10
-  movd xmm10, r9d         ;xmm10 = [0 | 0 | 0 | mask]
-  pshufb xmm10, xmm10     ;xmm10 = [mask | mask | mask | mask | mask | mask | mask | mask]
-  ;quiero tener N's en cada componente (rgb) ;;;;;;;;;;;;;;;;;;;;;;;;;;;revisar pos mas siginificativo ; 00000000b
+  pxor xmm7, xmm7 
+  pinsrb xmm10, r9b, 00000000b ;;xmm10 = [0 | 0 | 0 ...| mask]byte
+  pshufb xmm10, xmm7      
+  ; pshufb xmm10, xmm10     ;xmm10 = [mask | mask | mask | mask | mask | mask | mask | mask]bytes
+  ;quiero tener N's en cada componente (rgb)
   ; mask = 1 << n 
 
-  movdqu xmm8, [cmp_mask] ;xmm8 = [255..]
-  pxor xmm7, xmm7         ;xmm7 = [0's]
+  movdqu xmm8, [cmp_mask] ;xmm8 = [255..]bytes
+  pxor xmm7, xmm7         ;xmm7 = [0's]bytes
   mov ecx, r11d           ;recupero ecx
 
   xor r10,r10             ;inicio recorrido sobre fila r10 = 0
@@ -67,7 +65,7 @@ Nivel_asm:
 iterando:;xmm1 == |P3|P2|P1|P0| 16 bytes
         movdqu xmm0, [rdi]        ;levanto 16 bytes - trabajo con 4 pixeles
         movdqu xmm2, xmm10      ;xmm2 = mascara  
-        pand xmm2, xmm1         ;xmm2 = tengo 1 << N donde aplique
+        pand xmm2, xmm0         ;xmm2 = tengo 1 << N donde aplique
         pcmpgtb xmm2, xmm7      ;xmm2 = 1's donde cumple mask cc 0's
 
         pand xmm2, xmm8         ;xmm2 = seteo 255 en donde cumple mask, cc 0's
