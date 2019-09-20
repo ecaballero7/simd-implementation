@@ -1,11 +1,12 @@
 global Rombos_asm
 
 section .rodata
-;PIXEL ALFA|ROJO|VERDE|AZUL
+;pixel alpha, seteo alfa
 mask_alpha: dd 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000
-
+;mascara para sumar a las iteraciones sobre columna: j+0, j+1, j+2, j+3 (proceso 4 pixeles)
 mask_j: dd 0x00, 0x01, 0x02, 0x03
 
+;mascara para desempaquetar a word
 shuffle_1:	db 0x00,0x01,0x00,0x01
 			db 0x00,0x01,0xFF,0xFF
 			db 0x04,0x05,0x04,0x05
@@ -15,18 +16,16 @@ shuffle_2:	db 0x08,0x09,0x08,0x09
 			db 0x08,0x09,0xFF,0xFF
 			db 0x0C,0x0D,0x0C,0x0D
 			db 0x0C,0x0D,0xFF,0xFF
-section .data
 
+section .data
 ; size >> 1 = size/2
 mask_32: times 4 dd 32
 ; size >> 4 = size/16 
 mask_4: times 4 dd 4
-; 
+
 mask_2: times 4 dd 2
 ; -1
 mask_neg: times 4 dd -1
-
-val_1: times 4 DD 1
 
 section .text
 Rombos_asm: 
@@ -50,25 +49,25 @@ Rombos_asm:
 	mov r8d,edx 					;r8= columnas		
 
 	;guardo las mascaras en los registros XMMx
-	movdqu xmm15,[mask_alpha]		;xmm15 = [ff0000|ff0000|ff0000|ff0000]
-	movdqu xmm14,[mask_32] 			;xmm14 = size>>1|size>>1|size>>1| size>>1
-	movdqu xmm13,[mask_neg] 		;xmm13 = [-1 	|  -1   |  -1   |  -1
-	movdqu xmm12, [mask_j]		    ;xmm12 = [3		|   2 	|   1 	|   0
-	movdqu xmm11, [mask_4] 			;xmm11 = 
-	pxor xmm10, xmm10 				;xmm10 =  0		|	0	|	0 	| 	0
+	movdqu xmm15, [mask_alpha]		;xmm15 = [ff0000 |ff0000 |ff0000 | ff0000]
+	movdqu xmm14, [mask_32]			;xmm14 = [size>>1|size>>1|size>>1| size>>1]
+	movdqu xmm13, [mask_neg] 		;xmm13 = [-1 	|  -1   |  -1   |  -1]
+	movdqu xmm12, [mask_j]		    ;xmm12 = [3		|   2 	|   1 	|   0]
+	movdqu xmm11, [mask_4] 			;xmm11 = [4 	|   4   |   4   |   4]
+	pxor xmm10,   xmm10				;xmm10 = [0		|	0	|	0 	| 	0]
 
 	movdqu xmm9, [shuffle_1]
 	movdqu xmm8, [shuffle_2]
 
-	xor r10,r10 				;r10=0, cargo como fila inicial
+	xor r10,r10 					;r10=0, fila inicial
 	ciclo_fila:
-		cmp r10d,ecx 			;me fijo si llegue al final de las filas
+		cmp r10d,ecx 				;finalice el recorrido de las filas?
 		jge fin_loop
-		xor r11,r11				;inicializo columnas en cero
+		xor r11,r11					;columnas en cero
 		
-		mov rax,r10 			;calc mod i
+		mov rax,r10 				;calculo i mod size
 		xor rdx,rdx
-		div r9 					;rdx=(i%size)
+		div r9 						;rdx=(i%size)
 	    
 	    ;int ii = ((size>>1)-(i%size)) > 0 ? ((size>>1)-(i%size)) : -((size>>1)-(i%size));
 
@@ -79,13 +78,13 @@ Rombos_asm:
 		movdqu xmm3, xmm2 				;xmm3 = [(size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size)]
 		pcmpgtd xmm3, xmm10 			;xmm3 = 1's donde ((size>>1)-(i%size)) > 0 cc 0's
 		movdqu xmm4, xmm3 				;xmm4 = xmm3
-		pandn xmm3, xmm2 				;xmm3 = 
-		PMULLD xmm3, xmm13
-		pand xmm4, xmm2
+		pandn xmm3, xmm2 				;xmm3 = me quedo con los que ((size>>1)-(i%size)) < 0
+		PMULLD xmm3, xmm13 				;xmm3 = [-1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size)]
+		pand xmm4, xmm2 				;xmm4 = [(size>>1)-(i%size)    |  (size>>1)-(i%size)   |  (size>>1)-(i%size)   |  (size>>1)-(i%size)]
 		por xmm3, xmm2
 		movdqu xmm7, xmm3 				;xmm7 = [ii | ii | ii | ii]
 
-		xor rbx, rbx 					;contador 0..63
+		xor rbx, rbx 					;contador 0..63 - 0..63 
 		
 		ciclo_columna:
 			cmp r11d,r8d 				;me fijo si llegue al final de la columna
@@ -94,30 +93,14 @@ Rombos_asm:
 	        ;int jj = ((size>>1)-(j%size)) > 0 ? ((size>>1)-(j%size)) : -((size>>1)-(j%size));
 	        ;int x = (ii+jj-(size>>1)) > (size>>4) ? 0 : 2*(ii+jj-(size>>1));
 
-	        cmp rbx, 64
-	        jl .seguir
-	        pxor xmm2, xmm2
-		    xor rbx, rbx
-.seguir:
-			movq xmm2, rbx
-			PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 		| j 	| j		| j]			
-	        PADDD xmm2, xmm12 			;xmm6 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size] 
-	        
-			;movq xmm2,r11 				;xmm2 = [0		| 0 	| 0		| j]
-			;PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 		| j 	| j		| j]
-			;PADDD xmm2, xmm12 			;xmm2 = [j+3	| j+2	| j+1	| j]	
-			; movdqu xmm3, xmm2 			;xmm3 = [j+3	| j+2	| j+1	| j]
-			; CVTDQ2PS xmm3, xmm3 		;xmm3 = [j+3.00	| j+2.00| j+1.00| j.00] convierto a float de single presicion
-			; CVTSI2SS xmm6, r9 			;xmm6 = [00		|	00  |  00	| size.0] en float
-			; PSHUFD xmm6, xmm6, 00000000b;xmm6 = [size.0 | size.0| size.0| size.0]
-			; DIVPS xmm3, xmm6 			;xmm3 = [j+3/size | j+2/size | j+1/size | j/size] en float         xxxxx
-			; movdqu xmm4, [val_0.1]
-	  ;       subps xmm3, xmm4       ; resto 0.3 para truncar a int
-			; CVTPS2DQ xmm3, xmm3 		;convierto a int
-			; CVTPS2DQ xmm6, xmm6
-			; PMULLD xmm3, xmm6 			;xmm3 = x.64 
-			; PSUBD xmm2, xmm3 		    ;xmm2 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size] 
-			
+	        cmp rbx, 64 				;si llegue a 64, vuelvo a 0 
+	        jl .seguir 					;rbx <= 63
+	        pxor xmm2, xmm2 			;xmm0 = 0....0
+		    xor rbx, rbx 				;rbx = 0
+			.seguir:
+			movq xmm2, rbx 				;xmm2 = [x   | x  |  x  | 0]
+			PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 	 | j  |  j  | j]			
+	        PADDD xmm2, xmm12 			;xmm6 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size]       	
 			movdqu xmm3, xmm14 		    ;xmm3 = [size>>1	| size>>1	| size>>1	| size>>1]
 			PSUBD xmm3, xmm2 			;xmm3 = [(size>>1)-(j%size)....]
 			movdqu xmm4, xmm3 			;xmm4 = xmm3
@@ -125,9 +108,8 @@ Rombos_asm:
 			movdqu xmm5, xmm4 			;xmm4 = xmm5
 			pandn xmm5, xmm3 			;xmm5 = filtro los casos en donde son negativos y me los quedo en xmm5
 			pand xmm4, xmm3 			;xmm4 = valores positivos
-			PMULLD xmm5, xmm13
+			PMULLD xmm5, xmm13 			;xmm5 = tenia valores negativos lo multiplico por -1.
 			por xmm4, xmm5 				;xmm4 = [jj | jj | jj | jj]
-
 
 			PADDD xmm4, xmm7 			;xmm4 = [ii+jj | ii+jj | ii+jj | ii+jj]
 			psubd xmm4, xmm14 			;xmm4 = [ii+jj-(size>>1) | ii+jj-(size>>1) | ii+jj-(size>>1) | ii+jj-(size>>1)]
@@ -145,7 +127,6 @@ Rombos_asm:
 			PMOVZXBW xmm0,xmm1			;xmm1 = [a1r1g1b1 		| 		a0r0g0b0]
 			punpckhbw xmm1, xmm10 		;xmm0 = [a3r3g3b3 	 	| 		a2r2g2b2]
 
-
             movdqu xmm6,xmm5	;xmm6= [x3 	|x2	    |x1   	|x0]   
 			PSHUFB xmm5,xmm8 	;xmm5= [0   |x1		|x1		|x1		|0		|x0		|x0		|x0]
 			PSHUFB xmm6,xmm9 	;xmm6= [0	|x3 	|x3		|x3		|0		|x2		|x2		|x2]   
@@ -158,10 +139,10 @@ Rombos_asm:
 			;por xmm0,xmm15 		;xmm0= seteo mask_alpha en las posiciones de a
 
 			movdqu [rsi],xmm0	;guardo 4 pixeles procesados
-			lea rdi,[rdi+16] 	;avanzo 4 pixeles el origen
-			lea rsi,[rsi+16] 	;avanzo 4 pixeles el destino
+			lea rdi,[rdi+16] 	;avanzo 4 pixeles en origen
+			lea rsi,[rsi+16] 	;avanzo 4 pixeles en destino
 			add r11,4 			;aumento la cantidad de procesados en 4
-			add rbx, 4
+			add rbx, 4 			;++4 en resto de (0..63)
 			jmp ciclo_columna
 		fin_ciclo_columa:
 		inc r10
