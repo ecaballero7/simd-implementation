@@ -2,14 +2,9 @@ global Rombos_asm
 
 section .rodata
 ;PIXEL ALFA|ROJO|VERDE|AZUL
-%define filtro_alpa 0xFF000000
-
 mask_alpha: dd 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000
 
-mask_j: dd 0x00
-		dd 0x01
-		dd 0x02
-		dd 0x03
+mask_j: dd 0x00, 0x01, 0x02, 0x03
 
 shuffle_1:	db 0x00,0x01,0x00,0x01
 			db 0x00,0x01,0xFF,0xFF
@@ -31,6 +26,8 @@ mask_2: times 4 dd 2
 ; -1
 mask_neg: times 4 dd -1
 
+val_1: times 4 DD 1
+
 section .text
 Rombos_asm: 
 ;	 void Manchas_c(
@@ -44,6 +41,8 @@ Rombos_asm:
 	;armo el stack frame
 	push rbp
 	mov rbp,rsp
+	push rbx
+	sub rsp, 8
 
 	xor r9, r9
 	mov r9d, 64 					;r9 = size
@@ -86,7 +85,8 @@ Rombos_asm:
 		por xmm3, xmm2
 		movdqu xmm7, xmm3 				;xmm7 = [ii | ii | ii | ii]
 
-
+		xor rbx, rbx 					;contador 0..63
+		
 		ciclo_columna:
 			cmp r11d,r8d 				;me fijo si llegue al final de la columna
 			jge fin_ciclo_columa
@@ -94,17 +94,30 @@ Rombos_asm:
 	        ;int jj = ((size>>1)-(j%size)) > 0 ? ((size>>1)-(j%size)) : -((size>>1)-(j%size));
 	        ;int x = (ii+jj-(size>>1)) > (size>>4) ? 0 : 2*(ii+jj-(size>>1));
 
-			movq xmm2,r11 				;xmm2 = [0		| 0 	| 0		| j]
-			PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 		| j 	| j		| j]
-			PADDD xmm2, xmm12 			;xmm2 = [j+3	| j+2	| j+1	| j]	
-			movdqu xmm3, xmm2 			;xmm3 = [j+3	| j+2	| j+1	| j]
-			CVTDQ2PS xmm3, xmm3 		;xmm3 = [j+3.00	| j+2.00| j+1.00| j.00] convierto a float de single presicion
-			CVTSI2SS xmm6, r9 			;xmm6 = [00		|	00  |  00	| size.0] en float
-			PSHUFD xmm6, xmm6, 00000000b;xmm6 = [size.0 | size.0| size.0| size.0]
-			DIVPS xmm3, xmm6 			;xmm3 = [j+3/size | j+2/size | j+1/size | j/size] en float
-			CVTPS2DQ xmm3, xmm3 		;convierto a int
-			PMULLD xmm3, xmm6 			;xmm3 = 
-			PSUBD xmm2, xmm3 		    ;xmm2 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size]
+	        cmp rbx, 64
+	        jl .seguir
+	        pxor xmm2, xmm2
+		    xor rbx, rbx
+.seguir:
+			movq xmm2, rbx
+			PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 		| j 	| j		| j]			
+	        PADDD xmm2, xmm12 			;xmm6 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size] 
+	        
+			;movq xmm2,r11 				;xmm2 = [0		| 0 	| 0		| j]
+			;PSHUFD xmm2, xmm2, 00000000b;xmm2 = [j 		| j 	| j		| j]
+			;PADDD xmm2, xmm12 			;xmm2 = [j+3	| j+2	| j+1	| j]	
+			; movdqu xmm3, xmm2 			;xmm3 = [j+3	| j+2	| j+1	| j]
+			; CVTDQ2PS xmm3, xmm3 		;xmm3 = [j+3.00	| j+2.00| j+1.00| j.00] convierto a float de single presicion
+			; CVTSI2SS xmm6, r9 			;xmm6 = [00		|	00  |  00	| size.0] en float
+			; PSHUFD xmm6, xmm6, 00000000b;xmm6 = [size.0 | size.0| size.0| size.0]
+			; DIVPS xmm3, xmm6 			;xmm3 = [j+3/size | j+2/size | j+1/size | j/size] en float         xxxxx
+			; movdqu xmm4, [val_0.1]
+	  ;       subps xmm3, xmm4       ; resto 0.3 para truncar a int
+			; CVTPS2DQ xmm3, xmm3 		;convierto a int
+			; CVTPS2DQ xmm6, xmm6
+			; PMULLD xmm3, xmm6 			;xmm3 = x.64 
+			; PSUBD xmm2, xmm3 		    ;xmm2 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size] 
+			
 			movdqu xmm3, xmm14 		    ;xmm3 = [size>>1	| size>>1	| size>>1	| size>>1]
 			PSUBD xmm3, xmm2 			;xmm3 = [(size>>1)-(j%size)....]
 			movdqu xmm4, xmm3 			;xmm4 = xmm3
@@ -134,11 +147,11 @@ Rombos_asm:
 
 
             movdqu xmm6,xmm5	;xmm6= [x3 	|x2	    |x1   	|x0]   
-			PSHUFB xmm5,xmm8 	;xmm2= [0   |x1		|x1		|x1		|0		|x0		|x0		|x0]
-			PSHUFB xmm6,xmm9 	;xmm3= [0	|x3 	|x3		|x3		|0		|x2		|x2		|x2]   
+			PSHUFB xmm5,xmm8 	;xmm5= [0   |x1		|x1		|x1		|0		|x0		|x0		|x0]
+			PSHUFB xmm6,xmm9 	;xmm6= [0	|x3 	|x3		|x3		|0		|x2		|x2		|x2]   
 
-			PADDW xmm0, xmm5
-			PADDW xmm1, xmm6
+			PADDW xmm0, xmm6
+			PADDW xmm1, xmm5
 
 			PACKUSWB xmm0,xmm1  ;xmm0= a3   |r3+x3 	|g3+x3 	|b3+x3 	|a2  	|r2+x2 	|g2+x2 	|b2+x2|	0    |a1		|x1		|x1		|0		|x0		|x0		|x0
 
@@ -148,10 +161,13 @@ Rombos_asm:
 			lea rdi,[rdi+16] 	;avanzo 4 pixeles el origen
 			lea rsi,[rsi+16] 	;avanzo 4 pixeles el destino
 			add r11,4 			;aumento la cantidad de procesados en 4
+			add rbx, 4
 			jmp ciclo_columna
 		fin_ciclo_columa:
 		inc r10
 		jmp ciclo_fila
 	fin_loop:
+	add rsp, 8
+	pop rbx
 	pop rbp
 	ret
