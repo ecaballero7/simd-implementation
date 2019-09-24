@@ -70,7 +70,7 @@ Rombos_asm:
 		div r9 						;rdx=(i%size)
 	    
 	    ;int ii = ((size>>1)-(i%size)) > 0 ? ((size>>1)-(i%size)) : -((size>>1)-(i%size));
-
+	    ;se que el ancho de las imágenes es siempre > 16pxs y múltiplo de 8pxs
 		movq xmm1,rdx 			  		;xmm1 = [   0   |    0   |    0   | i%size]
 		PSHUFD xmm1,xmm1,00000000b		;xmm1 = [i%size | i%size | i%size | i%size]
 		movdqu xmm2, xmm14 				;xmm2 = [size>>1| size>>1| size>>1| size>>1]
@@ -81,7 +81,7 @@ Rombos_asm:
 		pandn xmm3, xmm2 				;xmm3 = me quedo con los que ((size>>1)-(i%size)) < 0
 		PMULLD xmm3, xmm13 				;xmm3 = [-1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size)]
 		pand xmm4, xmm2 				;xmm4 = [(size>>1)-(i%size)    |  (size>>1)-(i%size)   |  (size>>1)-(i%size)   |  (size>>1)-(i%size)]
-		por xmm3, xmm2
+		por xmm3, xmm4
 		movdqu xmm7, xmm3 				;xmm7 = [ii | ii | ii | ii]
 
 		xor rbx, rbx 					;contador 0..63 - 0..63 
@@ -92,8 +92,8 @@ Rombos_asm:
 
 	        ;int jj = ((size>>1)-(j%size)) > 0 ? ((size>>1)-(j%size)) : -((size>>1)-(j%size));
 	        ;int x = (ii+jj-(size>>1)) > (size>>4) ? 0 : 2*(ii+jj-(size>>1));
-
-	        cmp rbx, 64 				;si llegue a 64, vuelvo a 0 
+	        ;ver cuando el ancho es menor a 32
+	        cmp rbx, 63				 	;si llegue a 64, vuelvo a 0 
 	        jl .seguir 					;rbx <= 63
 	        pxor xmm2, xmm2 			;xmm0 = 0....0
 		    xor rbx, rbx 				;rbx = 0
@@ -124,23 +124,23 @@ Rombos_asm:
 
 			movdqu xmm1, [rdi] 			;xmm0 = [a3r3g3b3 | a2r2g2b2 | a1r1g1b1 |a0r0g0b0]
 			;convierto de byte a word
-			PMOVZXBW xmm0,xmm1			;xmm1 = [a1r1g1b1 		| 		a0r0g0b0]
-			punpckhbw xmm1, xmm10 		;xmm0 = [a3r3g3b3 	 	| 		a2r2g2b2]
+			PMOVZXBW xmm0,xmm1			;xmm1 = [a1r1g1b1 	| 		a0r0g0b0]
+			punpckhbw xmm1, xmm10 		;xmm0 = [a3r3g3b3 	| 		a2r2g2b2]
 
-            movdqu xmm6,xmm5	;xmm6= [x3 	|x2	    |x1   	|x0]   
-			PSHUFB xmm5,xmm8 	;xmm5= [0   |x1		|x1		|x1		|0		|x0		|x0		|x0]
-			PSHUFB xmm6,xmm9 	;xmm6= [0	|x3 	|x3		|x3		|0		|x2		|x2		|x2]   
+            movdqu xmm6,xmm5			;xmm6 = [x3  |x2	|x1   	|x0]   
+			PSHUFB xmm5,xmm8 			;xmm5 = [0   |x1	|x1		|x1		|0		|x0		|x0		|x0]
+			PSHUFB xmm6,xmm9 			;xmm6 = [0	 |x3 	|x3		|x3		|0		|x2		|x2		|x2]   
 
 			PADDW xmm0, xmm6
 			PADDW xmm1, xmm5
 
-			PACKUSWB xmm0,xmm1  ;xmm0= a3   |r3+x3 	|g3+x3 	|b3+x3 	|a2  	|r2+x2 	|g2+x2 	|b2+x2|	0    |a1		|x1		|x1		|0		|x0		|x0		|x0
+			PACKUSWB xmm0,xmm1  		;xmm0 = [a3|r3+x3|g3+x3|b3+x3 	a2|r2+x2|g2+x2|b2+x2 ....]
 
 			;por xmm0,xmm15 		;xmm0= seteo mask_alpha en las posiciones de a
 
-			movdqu [rsi],xmm0	;guardo 4 pixeles procesados
-			lea rdi,[rdi+16] 	;avanzo 4 pixeles en origen
-			lea rsi,[rsi+16] 	;avanzo 4 pixeles en destino
+			movdqu [rsi],xmm0	;pego los 4 pixeles procesados
+			lea rdi,[rdi+16] 	;avanzo 4 pxs en el origen
+			lea rsi,[rsi+16] 	;avanzo 4 pxs en destino
 			add r11,4 			;aumento la cantidad de procesados en 4
 			add rbx, 4 			;++4 en resto de (0..63)
 			jmp ciclo_columna
