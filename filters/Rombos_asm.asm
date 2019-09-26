@@ -74,24 +74,33 @@ pxor xmm0, xmm0 			;xmm0 = operador jj
 		inc r13
 		psubw xmm0, xmm2				;xmm4 = |(i%64)-32|(i%64)-32|(i%64)-32|(i%64)-32|
 		pabsw xmm0, xmm0
-		
+
 		;calculo x = ii+jj-(size/2)) > (size/16) ? 0 : 2*(ii+jj-(size/2))
 		movdqu xmm6, xmm4 	;xmm6 = xmm4 = ii
 		paddw xmm6, xmm0	;xmm6 = ii + jj
 		psubw xmm6, xmm2 	;xmm6 = ii + jj - 32
 		movdqu xmm7, xmm5 	;xmm7 = xmm5 = 64
 		psrlw xmm7, 4 		; 64 >> 4 = 4
-		pcmpgtw xmm7, xmm6 	;si xmm7[0..15] = 4 > xmm6[0..15] → xmm7[0..15] = ffff sino xmm7[0..15]=0
-		;pxor xmm7, xmm6		;ej: pxor( 0101 1010, 0000 1111 ) = 0101 0101
-		pand xmm7, xmm6 	;	 pand( 0101 0101, 0101 1010 ) = 0101 0000
-			;en xmm7 esta ii - (size/2)) > (size/16) ? 0 : (ii+jj-(size/2))
-			;hago shift a la izquierda de un bit para que quede ii+jj-(size/2)) > (size/16) ? 0 : 2*(ii+jj-(size/2))
-		psllw xmm7, 1 
+		movdqu xmm5, xmm6
+		pcmpgtw xmm5, xmm7	;si xmm5[0..15] > 4 → xmm5 [0..15] = ffff sino 0000
+		pxor xmm5, xmm6
+		pand xmm5,xmm6 
+		psllw xmm5, 1
+		movdqu xmm7, xmm5
+
+		;
+		;pcmpgtw xmm7, xmm6 	;si xmm7[0..15] = 4 > xmm6[0..15] → xmm7[0..15] = ffff sino xmm7[0..15]=0
+		;;pxor xmm7, xmm6		;ej: pxor( 0101 1010, 0000 1111 ) = 0101 0101
+		;pand xmm7, xmm6 	;	 pand( 0101 0101, 0101 1010 ) = 0101 0000
+		;	;en xmm7 esta ii - (size/2)) > (size/16) ? 0 : (ii+jj-(size/2))
+		;	;hago shift a la izquierda de un bit para que quede ii+jj-(size/2)) > (size/16) ? 0 : 2*(ii+jj-(size/2))
+		;psllw xmm7, 1 
 		movq xmm8, [r9]		;levanto de memoria 2 pixeles
 		add r9, 8 			;incremento el puntero de donde levanto memoria en 2 pixeles
 		
 		pxor xmm6, xmm6 	;xmm6 = 0
 		punpcklbw xmm8, xmm6;paso los packed bytes de xmm8 a packed words en xmm8
+		
 		paddw xmm8,xmm7 	;sumo el operador x a cada componente de los 2 pixeles que traje
 		por xmm8, xmm9
 		packuswb xmm8, xmm8 ;paso los componentes de word a byte (sobra la mitad del registro)
