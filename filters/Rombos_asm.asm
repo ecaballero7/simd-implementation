@@ -24,8 +24,6 @@ mask_32: times 4 dd 32
 mask_4: times 4 dd 4
 
 mask_2: times 4 dd 2
-; -1
-mask_neg: times 4 dd -1
 
 section .text
 Rombos_asm: 
@@ -51,7 +49,7 @@ Rombos_asm:
 	;guardo las mascaras en los registros XMMx
 	movdqu xmm15, [mask_alpha]		;xmm15 = [ff0000 |ff0000 |ff0000 | ff0000]
 	movdqu xmm14, [mask_32]			;xmm14 = [size>>1|size>>1|size>>1| size>>1]
-	movdqu xmm13, [mask_neg] 		;xmm13 = [-1 	|  -1   |  -1   |  -1]
+	movdqu xmm13, [mask_2] 			;xmm13 = [2		|   2   |   2   |   2]
 	movdqu xmm12, [mask_j]		    ;xmm12 = [3		|   2 	|   1 	|   0]
 	movdqu xmm11, [mask_4] 			;xmm11 = [4 	|   4   |   4   |   4]
 	pxor xmm10,   xmm10				;xmm10 = [0		|	0	|	0 	| 	0]
@@ -70,19 +68,12 @@ Rombos_asm:
 		div r9 						;rdx=(i%size)
 	    
 	    ;int ii = ((size>>1)-(i%size)) > 0 ? ((size>>1)-(i%size)) : -((size>>1)-(i%size));
-	    ;se que el ancho de las imágenes es siempre > 16pxs y múltiplo de 8pxs
 		movq xmm1,rdx 			  		;xmm1 = [   0   |    0   |    0   | i%size]
 		PSHUFD xmm1,xmm1,00000000b		;xmm1 = [i%size | i%size | i%size | i%size]
 		movdqu xmm2, xmm14 				;xmm2 = [size>>1| size>>1| size>>1| size>>1]
 		psubd xmm2, xmm1 		  		;xmm2 = [(size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size)]
-		movdqu xmm3, xmm2 				;xmm3 = [(size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size) | (size>>1)-(i%size)]
-		pcmpgtd xmm3, xmm10 			;xmm3 = 1's donde ((size>>1)-(i%size)) > 0 cc 0's
-		movdqu xmm4, xmm3 				;xmm4 = xmm3
-		pandn xmm3, xmm2 				;xmm3 = me quedo con los que ((size>>1)-(i%size)) < 0
-		PMULLD xmm3, xmm13 				;xmm3 = [-1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size) | -1.(size>>1)-(i%size)]
-		pand xmm4, xmm2 				;xmm4 = [(size>>1)-(i%size)    |  (size>>1)-(i%size)   |  (size>>1)-(i%size)   |  (size>>1)-(i%size)]
-		por xmm3, xmm4
-		movdqu xmm7, xmm3 				;xmm7 = [ii | ii | ii | ii]
+		PABSD xmm2, xmm2 				;xmm4 = ABS[(size>>1)-(i%size) |  (size>>1)-(i%size)   |  (size>>1)-(i%size)   |  (size>>1)-(i%size)]
+		movdqu xmm7, xmm2 				;xmm7 = [ii | ii | ii | ii]
 
 		xor rbx, rbx 					;contador 0..63 - 0..63 
 		
@@ -91,8 +82,7 @@ Rombos_asm:
 			jge fin_ciclo_columa
 
 	        ;int jj = ((size>>1)-(j%size)) > 0 ? ((size>>1)-(j%size)) : -((size>>1)-(j%size));
-	        ;int x = (ii+jj-(size>>1)) > (size>>4) ? 0 : 2*(ii+jj-(size>>1));
-	        ;ver cuando el ancho es menor a 32
+	        ;se que el ancho de las imágenes es siempre > 16pxs y múltiplo de 8pxs
 	        cmp rbx, 63				 	;si llegue a 64, vuelvo a 0 
 	        jl .seguir 					;rbx <= 63
 	        pxor xmm2, xmm2 			;xmm0 = 0....0
@@ -103,13 +93,7 @@ Rombos_asm:
 	        PADDD xmm2, xmm12 			;xmm6 = [(j+3)%size |(j+2)%size |(j+1)%size |j%size]       	
 			movdqu xmm3, xmm14 		    ;xmm3 = [size>>1	| size>>1	| size>>1	| size>>1]
 			PSUBD xmm3, xmm2 			;xmm3 = [(size>>1)-(j%size)....]
-			movdqu xmm4, xmm3 			;xmm4 = xmm3
-			pcmpgtd xmm4, xmm10 		;xmm4 = tengo 1's donde ((size>>1)-(j%size)) > 0  y 0's caso contrario
-			movdqu xmm5, xmm4 			;xmm4 = xmm5
-			pandn xmm5, xmm3 			;xmm5 = filtro los casos en donde son negativos y me los quedo en xmm5
-			pand xmm4, xmm3 			;xmm4 = valores positivos
-			PMULLD xmm5, xmm13 			;xmm5 = tenia valores negativos lo multiplico por -1.
-			por xmm4, xmm5 				;xmm4 = [jj | jj | jj | jj]
+			PABSD xmm4, xmm3 			;xmm4 = me quedo con valores positivos. 
 
 			PADDD xmm4, xmm7 			;xmm4 = [ii+jj | ii+jj | ii+jj | ii+jj]
 			psubd xmm4, xmm14 			;xmm4 = [ii+jj-(size>>1) | ii+jj-(size>>1) | ii+jj-(size>>1) | ii+jj-(size>>1)]
@@ -117,7 +101,7 @@ Rombos_asm:
 			pcmpgtd xmm5, xmm11			;xmm5 = tengo 1's donde (ii+jj-(size>>1)) > (size>>4) cc 0's
 			movdqu xmm6, xmm5 			;xmm6 = xmm5
 			pand xmm5, xmm10 			;xmm5 = 0's si (ii+jj-(size>>1)) > (size>>4)
-			movdqu xmm3, [mask_2]
+			movdqu xmm3, xmm13
 			PMULLD xmm4, xmm3   		;xmm4 = xmm4 * 2
 			pandn xmm6, xmm4 			;xmm6 = si (ii+jj-(size>>1) < (size>>4)
 			por xmm5, xmm6 				;xmm5 = [x3   | x2   | x1   | x0]
@@ -126,7 +110,8 @@ Rombos_asm:
 			;convierto de byte a word
 			PMOVZXBW xmm0,xmm1			;xmm1 = [a1r1g1b1 	| 		a0r0g0b0]
 			punpckhbw xmm1, xmm10 		;xmm0 = [a3r3g3b3 	| 		a2r2g2b2]
-
+	        
+	        ;int x = (ii+jj-(size>>1)) > (size>>4) ? 0 : 2*(ii+jj-(size>>1));
             movdqu xmm6,xmm5			;xmm6 = [x3  |x2	|x1   	|x0]   
 			PSHUFB xmm5,xmm8 			;xmm5 = [0   |x1	|x1		|x1		|0		|x0		|x0		|x0]
 			PSHUFB xmm6,xmm9 			;xmm6 = [0	 |x3 	|x3		|x3		|0		|x2		|x2		|x2]   
@@ -136,7 +121,7 @@ Rombos_asm:
 
 			PACKUSWB xmm0,xmm1  		;xmm0 = [a3|r3+x3|g3+x3|b3+x3 	a2|r2+x2|g2+x2|b2+x2 ....]
 
-			;por xmm0,xmm15 		;xmm0= seteo mask_alpha en las posiciones de a
+			por xmm0,xmm15 		;xmm0= seteo mask_alpha en las posiciones de a
 
 			movdqu [rsi],xmm0	;pego los 4 pixeles procesados
 			lea rdi,[rdi+16] 	;avanzo 4 pxs en el origen
