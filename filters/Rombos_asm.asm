@@ -121,7 +121,7 @@ Rombos_asm:
 
 			PACKUSWB xmm0,xmm1  		;xmm0 = [a3|r3+x3|g3+x3|b3+x3 	a2|r2+x2|g2+x2|b2+x2 ....]
 
-			por xmm0,xmm15 		;xmm0= seteo mask_alpha en las posiciones de a
+			por xmm0,xmm15 				;xmm0= seteo mask_alpha en las posiciones de a
 
 			movdqu [rsi],xmm0	;pego los 4 pixeles procesados
 			lea rdi,[rdi+16] 	;avanzo 4 pxs en el origen

@@ -38,8 +38,6 @@ Nivel_asm:
   pxor xmm7, xmm7 
   pinsrb xmm10, r9b, 00000000b ;;xmm10 = [0 | 0 | 0 ...| mask]byte
   pshufb xmm10, xmm7      
-  ; pshufb xmm10, xmm10     ;xmm10 = [mask | mask | mask | mask | mask | mask | mask | mask]bytes
-  ;quiero tener N's en cada componente (rgb)
   ; mask = 1 << n 
 
   movdqu xmm8, [cmp_mask] ;xmm8 = [255..]bytes
